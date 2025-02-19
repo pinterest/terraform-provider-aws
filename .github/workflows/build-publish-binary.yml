@@ -29,3 +29,29 @@ jobs:
           GOOS: darwin
           GOARCH: amd64
         run: go build -o terraform-provider-aws-mac
+
+      - name: Push Linux Binary to Artifactory
+        env:
+        # Ensure any necessary authentication details are set up as secrets
+          ARTIFACTORY_ENV: dev
+          ARTIFACTORY_REGION: use1
+        run: |
+          artifactory-push generic \
+          --env $ARTIFACTORY_ENV \
+          --region $ARTIFACTORY_REGION \
+          --props "OS=Linux;Arch=amd64" \
+          --src ./terraform-provider-aws-linux \
+          --target pinterest/local-terraform-provivder/terraform-provider-aws-linux
+
+      - name: Push Mac Binary to Artifactory
+        env:
+        # Ensure any necessary authentication details are set up as secrets
+          ARTIFACTORY_ENV: dev
+          ARTIFACTORY_REGION: use1
+        run: |
+          artifactory-push generic \
+          --env $ARTIFACTORY_ENV \
+          --region $ARTIFACTORY_REGION \
+          --props "OS=Mac;Arch=amd64" \
+          --src ./terraform-provider-aws-mac \
+          --target pinterest/local-terraform-provivder/terraform-provider-aws-mac
