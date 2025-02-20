@@ -32,7 +32,6 @@ jobs:
 
       - name: Push Linux Binary to Artifactory
         env:
-        # Ensure any necessary authentication details are set up as secrets
           ARTIFACTORY_ENV: dev
           ARTIFACTORY_REGION: use1
         run: |
@@ -45,7 +44,6 @@ jobs:
 
       - name: Push Mac Binary to Artifactory
         env:
-        # Ensure any necessary authentication details are set up as secrets
           ARTIFACTORY_ENV: dev
           ARTIFACTORY_REGION: use1
         run: |
