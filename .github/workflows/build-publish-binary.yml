@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Read and update provider version
         id: get_version
@@ -21,7 +21,7 @@ jobs:
           echo $NEW_VERSION > pinterest-version.txt
 
       - name: Set up Go environment
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version: '1.17.3'
 
