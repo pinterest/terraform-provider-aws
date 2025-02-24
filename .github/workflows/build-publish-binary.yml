@@ -12,6 +12,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v2
+      
+      - name: Read and update provider version
+        id: get_version
+        run: |
+          echo "VERSION=$(cat pinterest-version.txt)" >> $GITHUB_ENV
+          NEW_VERSION=$(cat pinterest-version.txt | awk -F. -v OFS=. '{$NF++; print}')
+          echo $NEW_VERSION > pinterest-version.txt
 
       - name: Set up Go environment
         uses: actions/setup-go@v3
@@ -40,7 +47,7 @@ jobs:
           --region $ARTIFACTORY_REGION \
           --props "OS=Linux;Arch=amd64" \
           --src ./terraform-provider-aws-linux \
-          --target pinterest/local-terraform-provivder/terraform-provider-aws-linux
+          --target terraform-providers-prod-local/terraform-provider-aws_v${{ env.VERSION }}
 
       - name: Push Mac Binary to Artifactory
         env:
@@ -52,4 +59,4 @@ jobs:
           --region $ARTIFACTORY_REGION \
           --props "OS=Mac;Arch=amd64" \
           --src ./terraform-provider-aws-mac \
-          --target pinterest/local-terraform-provivder/terraform-provider-aws-mac
+          --target terraform-providers-prod-local/terraform-provider-aws_v${{ env.VERSION }}
