@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '0 01 * * *' # Everyday at 1am
   push:
-    branches: ["main"]
+    branches: ["sanjay/release_pipeline"]
 
 jobs:
   build:
