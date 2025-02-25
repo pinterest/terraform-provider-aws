@@ -1,10 +1,11 @@
 name: Build and Publish to Registry
 
 on:
+  push:
+    branches:
+      - "sanjay/release_pipeline"
   schedule:
     - cron: '0 01 * * *' # Everyday at 1am
-  push:
-    branches: ["sanjay/release_pipeline"]
 
 jobs:
   build:
