@@ -21,7 +21,7 @@ jobs:
 
       - name: Add upstream remote
         run: git remote add upstream https://github.com/hashicorp/terraform-provider-aws.git
-     
+
       - name: Fetch upstream
         run: git fetch upstream
 
