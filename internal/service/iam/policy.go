@@ -91,7 +91,7 @@ func resourcePolicy() *schema.Resource {
 				ValidateFunc:          verify.ValidIAMPolicyJSON,
 				DiffSuppressFunc:      verify.SuppressEquivalentPolicyDiffs,
 				DiffSuppressOnRefresh: true,
-				StateFunc: func(v interface{}) string {
+				StateFunc: func(v any) string {
 					json, _ := structure.NormalizeJsonString(v)
 					return json
 				},
@@ -102,13 +102,16 @@ func resourcePolicy() *schema.Resource {
 			},
 			names.AttrTags:    tftags.TagsSchema(),
 			names.AttrTagsAll: tftags.TagsSchemaComputed(),
+			"delay_after_policy_creation_in_ms": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  -1,
+			},
 		},
-
-		CustomizeDiff: verify.SetTagsDiff,
 	}
 }
 
-func resourcePolicyCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func resourcePolicyCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
 	var diags diag.Diagnostics
 	conn := meta.(*conns.AWSClient).IAMClient(ctx)
 
@@ -147,7 +150,7 @@ func resourcePolicyCreate(ctx context.Context, d *schema.ResourceData, meta inte
 		err := policyCreateTags(ctx, conn, d.Id(), tags)
 
 		// If default tags only, continue. Otherwise, error.
-		if v, ok := d.GetOk(names.AttrTags); (!ok || len(v.(map[string]interface{})) == 0) && errs.IsUnsupportedOperationInPartitionError(partition, err) {
+		if v, ok := d.GetOk(names.AttrTags); (!ok || len(v.(map[string]any)) == 0) && errs.IsUnsupportedOperationInPartitionError(partition, err) {
 			return append(diags, resourcePolicyRead(ctx, d, meta)...)
 		}
 
@@ -159,7 +162,7 @@ func resourcePolicyCreate(ctx context.Context, d *schema.ResourceData, meta inte
 	return append(diags, resourcePolicyRead(ctx, d, meta)...)
 }
 
-func resourcePolicyRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func resourcePolicyRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
 	var diags diag.Diagnostics
 	conn := meta.(*conns.AWSClient).IAMClient(ctx)
 
@@ -167,7 +170,7 @@ func resourcePolicyRead(ctx context.Context, d *schema.ResourceData, meta interf
 		policy        *awstypes.Policy
 		policyVersion *awstypes.PolicyVersion
 	}
-	outputRaw, err := tfresource.RetryWhenNewResourceNotFound(ctx, propagationTimeout, func() (interface{}, error) {
+	outputRaw, err := tfresource.RetryWhenNewResourceNotFound(ctx, propagationTimeout, func() (any, error) {
 		iamPolicy := &policyWithVersion{}
 
 		if v, err := findPolicyByARN(ctx, conn, d.Id()); err == nil {
@@ -224,7 +227,7 @@ func resourcePolicyRead(ctx context.Context, d *schema.ResourceData, meta interf
 	return diags
 }
 
-func resourcePolicyUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func resourcePolicyUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
 	var diags diag.Diagnostics
 	conn := meta.(*conns.AWSClient).IAMClient(ctx)
 
@@ -238,40 +241,61 @@ func resourcePolicyUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 			return sdkdiag.AppendErrorf(diags, "policy (%s) is invalid JSON: %s", policy, err)
 		}
 
-		// Creating Policy and Setting the version as Default in one operation is causing
-		// Access issues. Hence to mitigate it, the SetAsDefault is set to false.
-		// Seperating the setDefaultPolicyVersion as a separate operation.
+		delayAfterPolicyCreationInMs := d.Get("delay_after_policy_creation_in_ms").(int)
 
-		input := &iam.CreatePolicyVersionInput{
-			PolicyArn:      aws.String(d.Id()),
-			PolicyDocument: aws.String(policy),
-			SetAsDefault:   false,
-		}
+		if delayAfterPolicyCreationInMs == -1 {
+			input := &iam.CreatePolicyVersionInput{
+				PolicyArn:      aws.String(d.Id()),
+				PolicyDocument: aws.String(policy),
+				SetAsDefault:   true,
+			}
+			_, err = conn.CreatePolicyVersion(ctx, input)
 
-		var policyVersionOutput *iam.CreatePolicyVersionOutput
-		policyVersionOutput, err = conn.CreatePolicyVersion(ctx, input)
+			if err != nil {
+				return sdkdiag.AppendErrorf(diags, "updating IAM Policy (%s): %s", d.Id(), err)
+			}
+		} else {
 
-		if err != nil {
-			return sdkdiag.AppendErrorf(diags, "creating IAM Policy (%s): %s", d.Id(), err)
-		}
+			// Creating a policy and setting its version as default in a single operation can expose a brief interval where
+			// valid STS tokens with attached Session Policies are rejected by AWS authorization servers that have
+			// not received the new default policy version. Separating this into two distinct actions of creating a policy version,
+			// pausing briefly, and then setting that to the default version can avoid this issue, and may be required
+			// in environments with very high S3 IO loads.
 
-		// Ensuring Thread Sleeps for 10 seconds before Setting version as default version
-		time.Sleep(10 * time.Second)
-		policyInput := &iam.SetDefaultPolicyVersionInput{
-			PolicyArn: aws.String(d.Id()),
-			VersionId: policyVersionOutput.PolicyVersion.VersionId,
-		}
+			input := &iam.CreatePolicyVersionInput{
+				PolicyArn:      aws.String(d.Id()),
+				PolicyDocument: aws.String(policy),
+				SetAsDefault:   false,
+			}
 
-		_, err = conn.SetDefaultPolicyVersion(ctx, policyInput)
-		if err != nil {
-			return sdkdiag.AppendErrorf(diags, "setting Default Policy version for IAM Policy (%s): %s", d.Id(), err)
+			var policyVersionOutput *iam.CreatePolicyVersionOutput
+			policyVersionOutput, err = conn.CreatePolicyVersion(ctx, input)
+
+			if err != nil {
+				return sdkdiag.AppendErrorf(diags, "creating IAM Policy (%s): %s", d.Id(), err)
+			}
+
+			// Ensuring Thread Sleeps for n ms before Setting version as default version
+			// The value is passed through a variable.
+			time.Sleep(time.Duration(delayAfterPolicyCreationInMs) * time.Millisecond)
+
+			policyInput := &iam.SetDefaultPolicyVersionInput{
+				PolicyArn: aws.String(d.Id()),
+				VersionId: policyVersionOutput.PolicyVersion.VersionId,
+			}
+
+			_, err = conn.SetDefaultPolicyVersion(ctx, policyInput)
+			if err != nil {
+				return sdkdiag.AppendErrorf(diags, "setting Default Policy version for IAM Policy (%s): %s", d.Id(), err)
+			}
+
 		}
 	}
 
 	return append(diags, resourcePolicyRead(ctx, d, meta)...)
 }
 
-func resourcePolicyDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func resourcePolicyDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
 	var diags diag.Diagnostics
 	conn := meta.(*conns.AWSClient).IAMClient(ctx)
 
