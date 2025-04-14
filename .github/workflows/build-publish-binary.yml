@@ -27,10 +27,10 @@ jobs:
       
       - name: Merge upstream branch into local branch
         run: |
-          git checkout main
+          git checkout sanjay/release_pipeline
           git merge upstream/main
       
       - name: Push changes
-        run: git push origin main
+        run: git push origin sanjay/release_pipeline
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
