@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 1 * * *' # Everyday at 1am
+  pull_request:
+    branches: 'sanjay/release_pipeline'
 
 jobs:
   sync:
