@@ -1,0 +1,40 @@
+# This is a basic workflow that is manually triggered
+
+name: Manual workflow
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 1 * * *' # Everyday at 1am
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Github
+        run: |
+          git config --global user.name 'Sanjay3101'
+          git config --global user.email 'sanjsrid@gmail.com'
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/hashicorp/terraform-provider-aws.git
+
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      - name: Merge upstream branch into local branch
+        run: |
+          git checkout sanjay/release_pipeline
+          git merge upstream/main
+
+      - name: Push changes
+        run: git push origin sanjay/release_pipeline
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
